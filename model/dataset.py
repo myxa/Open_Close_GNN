@@ -12,8 +12,8 @@ class OpenCloseDataset(Dataset):
 
         self.test = test
         self.datafolder = datafolder
-        self.open = np.load(f'{datafolder}/open.npy')
-        self.close = np.load(f'{datafolder}/close.npy')
+        self.open = np.load(f'{datafolder}/raw/open.npy')
+        self.close = np.load(f'{datafolder}/raw/close.npy')
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
@@ -27,10 +27,10 @@ class OpenCloseDataset(Dataset):
         """ If these files are found in raw_dir, processing is skipped"""
         # todo test filenames
         if self.test:
-            return [os.path.join(self.datafolder, 'test', f'data_{i}.pt') for i in range(47+47)]
+            return [os.path.join(self.datafolder, 'processed', 'test', f'data_{i}.pt') for i in range(47+47)]
 
         else:
-            return [os.path.join(self.datafolder, f'data_{i}.pt') for i in range(47+47)]
+            return [os.path.join(self.datafolder, 'processed', f'data_{i}.pt') for i in range(47+47)]
 
     def download(self):
         # todo download data

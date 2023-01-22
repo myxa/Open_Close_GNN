@@ -15,7 +15,7 @@ def fit_epoch(model, loader, criterion, optimizer):
         output = model(data)
         loss = criterion(output, data.y)
         loss.backward()
-        loss_all += loss.item() # data.num_graphs *
+        loss_all += loss.item()  # data.num_graphs *
         optimizer.step()
     return np.mean(loss_all)
 
