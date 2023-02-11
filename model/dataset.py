@@ -8,18 +8,20 @@ import os
 
 class OpenCloseDataset(Dataset):
 
-    def __init__(self, datafolder, test=False, transform=None, pre_transform=None):
+    def __init__(self, datafolder, test=False, transform=None, pre_transform=None, k_degree=10):
 
         self.test = test
         self.datafolder = datafolder
-        self.open = np.load(f'{datafolder}/raw/open.npy')
-        self.close = np.load(f'{datafolder}/raw/close.npy')
+        self.open = np.load(f'{datafolder}/raw/open_sorted.npy')
+        self.close = np.load(f'{datafolder}/raw/close_sorted.npy')
+        self.edge_attr = torch.from_numpy(np.load(f'{datafolder}/edge_attr.npy'))
+        self.k_degree = k_degree
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
     @property
     def raw_file_names(self):
-        return ['close.npy', 'open.npy']
+        return ['close_sorted.npy', 'open_sorted.npy']
 
     @property
     def processed_file_names(self):
@@ -33,7 +35,6 @@ class OpenCloseDataset(Dataset):
             return [os.path.join(self.datafolder, 'processed', f'data_{i}.pt') for i in range(47+47)]
 
     def download(self):
-        # todo download data
         pass
 
     def process(self):
@@ -48,14 +49,17 @@ class OpenCloseDataset(Dataset):
 
         x = torch.from_numpy(matr).float()
 
-        adj = self.compute_KNN_graph(matr)
-        adj = torch.from_numpy(adj).float()
+        if self.k_degree is not None:
+            adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
+            adj = torch.from_numpy(adj).float()
+            edge_index, edge_attr = dense_to_sparse(adj)
+            self.edge_attr = edge_attr
+        else:
+            edge_index = self._adjacency_threshold(x)
 
-        edge_index, edge_attr = dense_to_sparse(adj)
         label = torch.tensor(0 if state == 'close' else 1).long()
 
-        data = Data(x=x, edge_index=edge_index,
-                    edge_attr=edge_attr, y=label)
+        data = Data(x=x, edge_index=edge_index, edge_attr=self.edge_attr, y=label)
 
         index = index + 47 if state == 'close' else index
         if self.test:
@@ -68,7 +72,7 @@ class OpenCloseDataset(Dataset):
                                     f'data_{index}.pt'))
         return data
 
-    def compute_KNN_graph(self, matrix, k_degree=10):
+    def compute_KNN_graph(self, matrix, k_degree):
         """ Calculate the adjacency matrix from the connectivity matrix."""
 
         matrix = np.abs(matrix)
@@ -101,6 +105,16 @@ class OpenCloseDataset(Dataset):
         W = W - W.multiply(bigger) + W.T.multiply(bigger)
 
         return W.todense()
+
+    def _adjacency_threshold(self, matr, threshold=0.5):
+        # todo optimize ???
+        idx = []
+        for i in range(len(matr)):
+            for j in range(len(matr)):
+                if abs(matr[i, j]) > threshold:
+                    idx.append((i, j))
+
+        return torch.tensor(idx).long().t().contiguous()
 
     def len(self):
         return 47+47  # len(self.files)

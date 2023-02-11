@@ -1,80 +1,55 @@
 import torch
 from tqdm import tqdm
 import numpy as np
-from torch_geometric.loader import DataLoader
-from sklearn.metrics import confusion_matrix
-import torch.nn.functional as F
+from sklearn.metrics import precision_score, recall_score
 
 
-def fit_epoch(model, loader, criterion, optimizer):
+# todo precision recall
+
+
+def train_epoch(train_loader, model, criterion, optimizer):
     model.train()
-    loss_all = 0
-    for data in loader:
-        data = data.to(device())
-        optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, data.y)
-        loss.backward()
-        loss_all += loss.item()  # data.num_graphs *
-        optimizer.step()
-    return np.mean(loss_all)
+    for data in train_loader:  # Iterate in batches over the training dataset.
+        out = model(data)  # Perform a single forward pass.
+        loss = criterion(out, data.y)  # Compute the loss.
+        loss.backward()  # Derive gradients.
+        optimizer.step()  # Update parameters based on gradients.
+        optimizer.zero_grad()  # Clear gradients.
 
 
-def eval_epoch(model, loader, criterion):
+def eval_epoch(loader, model, criterion):
     model.eval()
-    pred = []
-    label = []
-    loss_all = 0
-    for data in loader:
-        data = data.to(device())
-        output = model(data)
-        loss = criterion(output, data.y)
-        loss_all += loss.item() # data.num_graphs *
-        pred.append(F.softmax(output, dim=1).max(dim=1)[1])
-        label.append(data.y)
+    losses = 0
+    correct = 0
+    pr = []
+    rc = []
+    for data in loader:  # Iterate in batches over the training/test dataset.
+        out = model(data)
+        loss = criterion(out, data.y)
+        losses += loss.item()
+        pred = out.argmax(dim=1)  # Use the class with the highest probability.
+        correct += int((pred == data.y).sum())  # Check against ground-truth labels.
+        pr.append(precision_score(data.y, pred, zero_division=0))
+        rc.append(recall_score(data.y, pred, zero_division=0))
+        # Derive ratio of correct predictions.
+    return losses / len(loader.dataset), correct / len(loader.dataset), np.mean(pr), np.mean(rc)
 
-    y_pred = torch.cat(pred, dim=0).cpu().detach().numpy()
-    y_true = torch.cat(label, dim=0).cpu().detach().numpy()
-    tn, fp, fn, tp = confusion_matrix(y_pred, y_true).ravel()
-    # print(tn)
-    epoch_sen = tp / (tp + fn + 0.000001)
-    epoch_spe = tn / (tn + fp + 0.000001)
-    epoch_acc = (tn + tp) / (tn + tp + fn + fp)
-    return epoch_sen, epoch_spe, epoch_acc, np.mean(loss_all)
+
+def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None):
+    losses = []
+    for epoch in tqdm(range(1, epochs+1)):
+        train_epoch(train_loader, model, criterion, optimizer)
+        train_loss, train_acc, _, _ = eval_epoch(train_loader, model, criterion)
+        val_loss, test_acc, _, _ = eval_epoch(val_loader, model, criterion)
+        if scheduler is not None:
+            scheduler.step()
+
+        print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
+        losses.append((train_loss, val_loss))
+    return losses
 
 
 def device():
     return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def train(train_dataset, val_dataset, model, epochs, batch_size, opt, criterion, save_best=False):
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
-
-    history = []
-    best_val_loss = 1000
-    log_template = "train_loss {t_loss:0.4f} " \
-                   "val_loss {v_loss:0.4f} val_acc {v_acc:0.4f} " \
-                   "\nprecision {precision:0.3f} recall {recall:0.3f}"
-    with tqdm(desc="epoch", total=epochs) as pbar_outer:
-
-        for epoch in range(1, epochs+1):
-            train_loss = fit_epoch(model, train_loader, criterion, opt)
-            precision, recall, acc, val_loss = eval_epoch(model, val_loader, criterion)
-            history.append((train_loss, val_loss, acc, precision, recall))
-
-            if save_best:
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    torch.save(model.state_dict(), save_best)
-
-            pbar_outer.update(1)
-            tqdm.write(log_template.format(t_loss=train_loss,
-                                           v_loss=val_loss, v_acc=acc,
-                                           precision=precision, recall=recall))
-            print('')
-
-    if save_best:
-        model.load_state_dict(torch.load(save_best, map_location=device()))
-
-    return history
