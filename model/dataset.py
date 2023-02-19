@@ -14,7 +14,7 @@ class OpenCloseDataset(Dataset):
         self.datafolder = datafolder
         self.open = np.load(f'{datafolder}/raw/open_sorted.npy')
         self.close = np.load(f'{datafolder}/raw/close_sorted.npy')
-        self.edge_attr = torch.from_numpy(np.load(f'{datafolder}/edge_attr.npy'))
+        self.edge_attr = None #torch.from_numpy(np.load(f'{datafolder}/edge_attr.npy'))
         self.k_degree = k_degree
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
