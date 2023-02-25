@@ -8,13 +8,14 @@ import os
 
 class OpenCloseDataset(Dataset):
 
-    def __init__(self, datafolder, test=False, transform=None, pre_transform=None, k_degree=10):
+    def __init__(self, datafolder, reload=False, test=False, transform=None, pre_transform=None, k_degree=10):
 
+        self.reload = reload
         self.test = test
         self.datafolder = datafolder
         self.open = np.load(f'{datafolder}/raw/open_sorted.npy')
         self.close = np.load(f'{datafolder}/raw/close_sorted.npy')
-        self.edge_attr = None #torch.from_numpy(np.load(f'{datafolder}/edge_attr.npy'))
+        self.edge_attr = None
         self.k_degree = k_degree
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
@@ -25,17 +26,13 @@ class OpenCloseDataset(Dataset):
 
     @property
     def processed_file_names(self):
-
-        """ If these files are found in raw_dir, processing is skipped"""
-        # todo test filenames
-        if self.test:
-            return [os.path.join(self.datafolder, 'processed', 'test', f'data_{i}.pt') for i in range(47+47)]
-
+        if self.reload:
+            return [i for i in range(47+47)]
         else:
-            return [os.path.join(self.datafolder, 'processed', f'data_{i}.pt') for i in range(47+47)]
+            return [f'data_{i}.pt' for i in range(47+47)]
 
     def download(self):
-        pass
+        print('yo')
 
     def process(self):
 
