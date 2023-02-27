@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.metrics import precision_score, recall_score
 from sklearn.model_selection import StratifiedKFold
 from torch_geometric.loader import DataLoader
+from torchmetrics.classification import BinaryRecall, BinaryPrecision, BinaryAccuracy
 
 # todo precision recall
 
@@ -22,9 +23,11 @@ def train_epoch(train_loader, model, criterion, optimizer):
 def eval_epoch(loader, model, criterion):
     model.eval()
     losses = 0
-    correct = 0
-    pr = []
-    rc = []
+    acc, pr, rc = [], [], []
+    accuracy = BinaryAccuracy()
+    precision = BinaryPrecision()
+    recall = BinaryRecall()
+
     with torch.no_grad():
         for data in loader:
             data = data.to(device())
@@ -32,26 +35,36 @@ def eval_epoch(loader, model, criterion):
             loss = criterion(out, data.y)
             losses += loss.item()
             pred = out.argmax(dim=1)
-            correct += int((pred.cpu() == data.y.cpu()).sum())
-            pr.append(precision_score(data.y.cpu(), pred.cpu(), zero_division=0))
-            rc.append(recall_score(data.y.cpu(), pred.cpu(), zero_division=0))
+            acc.append(accuracy(pred.cpu(), data.y.cpu()))
+            pr.append(precision(pred.cpu(), data.y.cpu()))
+            rc.append(recall(pred.cpu(), data.y.cpu()))
 
-    return losses / len(loader.dataset), correct / len(loader.dataset), np.mean(pr), np.mean(rc)
+            #
+            # correct += int((pred.cpu() == data.y.cpu()).sum())
+            # pr.append(precision_score(data.y.cpu(), pred.cpu(), zero_division=0))
+            # rc.append(recall_score(data.y.cpu(), pred.cpu(), zero_division=0))
+
+    return losses / len(loader.dataset), np.mean(acc), np.mean(pr), np.mean(rc)
 
 
 def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None):
-    losses = []
+
+    history = []
     for epoch in tqdm(range(1, epochs+1)):
         train_epoch(train_loader, model, criterion, optimizer)
-        train_loss, train_acc, _, _ = eval_epoch(train_loader, model, criterion)
-        val_loss, test_acc, _, _ = eval_epoch(val_loader, model, criterion)
+        train_loss, train_acc, train_prec, train_rec = eval_epoch(train_loader, model, criterion)
+        val_loss, test_acc, test_prec, test_rec = eval_epoch(val_loader, model, criterion)
         if scheduler is not None:
             scheduler.step()
 
-        print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, Train Acc: {train_acc:.4f},'
-              f' Test Acc: {test_acc:.4f}')
-        losses.append((train_loss, val_loss))
-    return losses
+        print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, '
+              f'Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
+
+        print(f'Test precision: {test_prec:.4f}, Test recall: {test_rec:.4f}')
+        # f'Train precision: {train_prec:.4f}, Train recall: {train_rec:.4f}, '
+        history.append((train_loss, val_loss, train_acc, test_acc))
+
+    return history
 
 
 def device(t=None):
