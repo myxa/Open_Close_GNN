@@ -6,8 +6,6 @@ from sklearn.model_selection import StratifiedKFold
 from torch_geometric.loader import DataLoader
 from torchmetrics.classification import BinaryRecall, BinaryPrecision, BinaryAccuracy
 
-# todo precision recall
-
 
 def train_epoch(train_loader, model, criterion, optimizer):
     model.train()
@@ -111,5 +109,7 @@ def cross_val(data, model_name, n_splits=10, epochs=20, batch_size=32,  **kwargs
         eval_metrics[n_fold, 2] = np.std(acc)
 
         return eval_metrics
+    
+
 
 

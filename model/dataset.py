@@ -4,9 +4,141 @@ from torch_geometric.utils import dense_to_sparse
 from scipy.sparse import coo_matrix
 import numpy as np
 import os
+from scipy.io import loadmat
+
+import numpy.ma as ma
 
 
 class OpenCloseDataset(Dataset):
+    def __init__(self, datafolder, reload=False, test=False, transform=None, pre_transform=None, k_degree=10):
+        self.reload = reload
+        self.test = test
+        self.datafolder = datafolder
+        self.close = loadmat(f'{datafolder}/raw/resultsROI_Condition001.mat')['Z']
+        self.open  = loadmat(f'{datafolder}/raw/resultsROI_Condition002.mat')['Z']
+        self.edge_attr = None
+        self.k_degree = k_degree
+
+        super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
+
+    @property
+    def raw_file_names(self):
+        return ['resultsROI_Condition001.mat', 'resultsROI_Condition002.mat']
+    
+    @property
+    def processed_file_names(self):
+        if self.reload:
+            return [f'data_{i}.pt' for i in range(84*2)]
+        else:
+            return [f'data_{i}.pt' for i in range(84*2)]
+        
+    def len(self):
+        return 84 + 84
+    
+    def download(self):
+        print('yo')
+    
+    def process(self):
+
+        for index in range(84):
+            _ = self._load_and_save(index, 'open')
+
+        for index in range(84):
+            _ = self._load_and_save(index, 'close')
+
+    def _load_and_save(self, index, state):
+
+        if state == 'open':
+            matr = self.open[:, :, index]
+        elif state == 'close':
+            matr = self.close[:, :, index]
+
+        np.fill_diagonal(matr, 0)
+
+        x = torch.from_numpy(matr).float()
+
+        if self.k_degree is not None:
+            adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
+            adj = torch.from_numpy(adj).float()
+            edge_index, edge_attr = dense_to_sparse(adj)
+            self.edge_attr = edge_attr
+        else:
+            edge_index = self._adjacency_threshold(x)
+
+        label = torch.tensor(0 if state == 'close' else 1).long()
+
+        data = Data(x=x, edge_index=edge_index, edge_attr=self.edge_attr, y=label)
+
+        index = index + 84 if state == 'close' else index
+        if self.test:
+            torch.save(data,
+                       os.path.join(self.processed_dir, 'test',
+                                    f'data_{index}.pt'))
+        else:
+            torch.save(data,
+                       os.path.join(self.processed_dir,
+                                    f'data_{index}.pt'))
+        return data
+    
+    def compute_KNN_graph(self, matrix, k_degree):
+        """ Calculate the adjacency matrix from the connectivity matrix."""
+
+        matrix = np.abs(matrix)
+        idx = np.argsort(-matrix)[:, 0:k_degree]
+        matrix.sort()
+        matrix = matrix[:, ::-1]
+        matrix = matrix[:, 0:k_degree]
+
+        A = self._adjacency(matrix, idx).astype(np.float32)
+
+        return A
+
+    def _adjacency(self, dist, idx):
+
+        m, k = dist.shape
+        assert m, k == idx.shape
+        assert dist.min() >= 0
+
+        # Weight matrix.
+        I = np.arange(0, m).repeat(k)
+        J = idx.reshape(m * k)
+        V = dist.reshape(m * k)
+        W = coo_matrix((V, (I, J)), shape=(m, m))
+
+        # No self-connections.
+        W.setdiag(0)
+
+        # Non-directed graph.
+        bigger = W.T > W
+        W = W - W.multiply(bigger) + W.T.multiply(bigger)
+
+        return W.todense()
+
+    def _adjacency_threshold(self, matr, threshold=0.5):
+        # todo optimize ???
+        # todo переделать порог
+        idx = []
+        for i in range(len(matr)):
+            for j in range(len(matr)):
+                if abs(matr[i, j]) > threshold:
+                    idx.append((i, j))
+
+        return torch.tensor(idx).long().t().contiguous()
+
+    def get(self, idx):
+        """ - Equivalent to __getitem__ in pytorch
+            - Is not needed for PyG's InMemoryDataset
+        """
+        if self.test:
+            data = torch.load(os.path.join(self.processed_dir,
+                                           f'data_test_{idx}.pt'))
+        else:
+            data = torch.load(os.path.join(self.processed_dir,
+                                           f'data_{idx}.pt'))
+        return data
+
+
+class oldOpenCloseDataset(Dataset):
 
     def __init__(self, datafolder, reload=False, test=False, transform=None, pre_transform=None, k_degree=10):
 
@@ -127,3 +259,17 @@ class OpenCloseDataset(Dataset):
             data = torch.load(os.path.join(self.processed_dir,
                                            f'data_{idx}.pt'))
         return data
+    
+
+
+def to_triangle(inp_path):
+    #подсчитать корреляции и отрезать из них часть.
+    mat = loadmat(inp_path)
+    corr_mat = mat['Z']
+
+    #with np.errstate(invalid="ignore"):
+    with np.errstate(invalid="raise"):
+        corr = np.nan_to_num(corr_mat)
+        mask = np.invert(np.tri(corr.shape[0], k=-1, dtype=bool))
+        m = ma.masked_where(mask == 1, mask)
+        return (ma.masked_where(m, corr).compressed(), corr)
