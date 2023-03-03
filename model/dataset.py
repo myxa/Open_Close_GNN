@@ -18,6 +18,7 @@ class OpenCloseDataset(Dataset):
         self.open  = loadmat(f'{datafolder}/raw/resultsROI_Condition002.mat')['Z']
         self.edge_attr = None
         self.k_degree = k_degree
+        self.dl = np.array([52, 256, 53, 257, 54, 258, 55, 259])
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
@@ -28,7 +29,7 @@ class OpenCloseDataset(Dataset):
     @property
     def processed_file_names(self):
         if self.reload:
-            return [f'data_{i}.pt' for i in range(84*2)]
+            return [f'_data_{i}.pt' for i in range(84*2)]
         else:
             return [f'data_{i}.pt' for i in range(84*2)]
         
@@ -54,6 +55,8 @@ class OpenCloseDataset(Dataset):
             matr = self.close[:, :, index]
 
         np.fill_diagonal(matr, 0)
+        matr = np.delete(matr, self.dl, 0)
+        matr = np.delete(matr, self.dl, 1)
 
         x = torch.from_numpy(matr).float()
 
