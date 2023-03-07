@@ -18,7 +18,7 @@ class OpenCloseDataset(Dataset):
         self.open  = loadmat(f'{datafolder}/raw/resultsROI_Condition002.mat')['Z']
         self.edge_attr = None
         self.k_degree = k_degree
-        self.dl = np.array([52, 256, 53, 257, 54, 258, 55, 259])
+        self.dl = np.array([52, 53, 54, 55])
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
