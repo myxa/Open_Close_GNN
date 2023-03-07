@@ -1,3 +1,7 @@
 data
 weights
 .ipynb_checkpoints
+__pycache__
+requirements
+.idea
+.vscode
