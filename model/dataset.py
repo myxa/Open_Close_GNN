@@ -18,7 +18,7 @@ class OpenCloseDataset(Dataset):
         self.open  = loadmat(f'{datafolder}/raw/resultsROI_Condition002.mat')['Z']
         self.edge_attr = None
         self.k_degree = k_degree
-        self.dl = np.array([52, 256, 53, 257, 54, 258, 55, 259])
+        self.dl = np.array([256, 257, 258, 259]) # [52, 256, 53, 257, 54, 258, 55, 259]
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
@@ -54,7 +54,8 @@ class OpenCloseDataset(Dataset):
         elif state == 'close':
             matr = self.close[:, :, index]
 
-        np.fill_diagonal(matr, 0)
+        # todo fill with 0 or 1
+        np.fill_diagonal(matr, 1)
         matr = np.delete(matr, self.dl, 0)
         matr = np.delete(matr, self.dl, 1)
 
@@ -148,8 +149,8 @@ class oldOpenCloseDataset(Dataset):
         self.reload = reload
         self.test = test
         self.datafolder = datafolder
-        self.open = np.load(f'{datafolder}/raw/open_sorted.npy')
-        self.close = np.load(f'{datafolder}/raw/close_sorted.npy')
+        self.close = np.load(f'{datafolder}/raw/close_conc.npy') 
+        self.open  = np.load(f'{datafolder}/raw/open_conc.npy')
         self.edge_attr = None
         self.k_degree = k_degree
 
@@ -162,9 +163,9 @@ class oldOpenCloseDataset(Dataset):
     @property
     def processed_file_names(self):
         if self.reload:
-            return [i for i in range(47+47)]
+            return [i for i in range(3528*2)]
         else:
-            return [f'data_{i}.pt' for i in range(47+47)]
+            return [f'data_{i}.pt' for i in range(3528*2)]
 
     def download(self):
         print('yo')
@@ -193,7 +194,7 @@ class oldOpenCloseDataset(Dataset):
 
         data = Data(x=x, edge_index=edge_index, edge_attr=self.edge_attr, y=label)
 
-        index = index + 47 if state == 'close' else index
+        index = index + 3528 if state == 'close' else index
         if self.test:
             torch.save(data,
                        os.path.join(self.processed_dir, 'test',
@@ -249,7 +250,7 @@ class oldOpenCloseDataset(Dataset):
         return torch.tensor(idx).long().t().contiguous()
 
     def len(self):
-        return 47+47  # len(self.files)
+        return 3528  # len(self.files)
 
     def get(self, idx):
         """ - Equivalent to __getitem__ in pytorch
