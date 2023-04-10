@@ -10,22 +10,15 @@ class GCN(nn.Module):
         self.conv1 = GCNConv(int(num_features), channels[0])
         self.bn1 = BatchNorm(channels[0])
         self.conv2 = GCNConv(channels[0], channels[1])
-        self.bn2 = BatchNorm(channels[1])
-        self.conv3 = GCNConv(channels[1], channels[2])
         self.dropout = nn.Dropout(dropout)
         self.relu = nn.ReLU()
-        self.lin1 = nn.Linear(channels[2], 2)
+        self.lin1 = nn.Linear(channels[1], 2)
 
-    def forward(self, data):
-        x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
-        batch = data.batch
+    def forward(self, x, edge_index, edge_attr=None, batch=None):
         x = self.relu(self.conv1(x, edge_index, edge_attr))
         x = self.bn1(x)
-        # x = self.dropout(x)
         x = self.relu(self.conv2(x, edge_index, edge_attr))
-        x = self.bn2(x)
         x = self.dropout(x)
-        x = self.relu(self.conv3(x, edge_index, edge_attr))
         x = global_mean_pool(x, batch)
         x = self.lin1(x)
         return x
@@ -41,13 +34,12 @@ class GATv2(nn.Module):
         self.elu = nn.ELU()
         self.bn = BatchNorm(dim_h*heads)
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
+    def forward(self, x, edge_index, edge_attr=None, batch=None):
         x = self.gat1(x, edge_index)
         x = self.bn(self.elu(x))
         x = self.dropout(x)
         x = self.elu(self.gat2(x, edge_index))
-        x = global_mean_pool(x, data.batch)
+        x = global_mean_pool(x, batch)
         x = self.lin(x)
         return x
 

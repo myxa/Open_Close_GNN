@@ -11,7 +11,7 @@ def train_epoch(train_loader, model, criterion, optimizer):
     model.train()
     for data in train_loader:
         data = data.to(device())
-        out = model(data)
+        out = model(data.x, data.edge_index, data.edge_attr, data.batch)
         loss = criterion(out, data.y)
         loss.backward()
         optimizer.step()
@@ -29,7 +29,7 @@ def eval_epoch(loader, model, criterion):
     with torch.no_grad():
         for data in loader:
             data = data.to(device())
-            out = model(data)
+            out = model(data.x, data.edge_index, data.edge_attr, data.batch)
             loss = criterion(out, data.y)
             losses += loss.item()
             pred = out.argmax(dim=1)
@@ -37,23 +37,25 @@ def eval_epoch(loader, model, criterion):
             pr.append(precision(pred.cpu(), data.y.cpu()))
             rc.append(recall(pred.cpu(), data.y.cpu()))
 
-            #
-            # correct += int((pred.cpu() == data.y.cpu()).sum())
-            # pr.append(precision_score(data.y.cpu(), pred.cpu(), zero_division=0))
-            # rc.append(recall_score(data.y.cpu(), pred.cpu(), zero_division=0))
-
     return losses / len(loader.dataset), np.mean(acc), np.mean(pr), np.mean(rc)
 
 
-def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None):
+def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None, save_best=False, path_to_save=None):
 
     history = []
+    best_val_loss = 1000
     for epoch in tqdm(range(1, epochs+1)):
         train_epoch(train_loader, model, criterion, optimizer)
         train_loss, train_acc, train_prec, train_rec = eval_epoch(train_loader, model, criterion)
         val_loss, test_acc, test_prec, test_rec = eval_epoch(val_loader, model, criterion)
         if scheduler is not None:
             scheduler.step()
+
+        if save_best:
+            if best_val_loss > val_loss:
+                best_val_loss = val_loss
+                torch.save(model.state_dict(), path_to_save)
+
 
         print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, '
               f'Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
@@ -62,14 +64,14 @@ def train(model, epochs, train_loader, val_loader, criterion, optimizer, schedul
         # f'Train precision: {train_prec:.4f}, Train recall: {train_rec:.4f}, '
         history.append((train_loss, val_loss, train_acc, test_acc))
 
+    if save_best:
+        model.load_state_dict(torch.load(path_to_save, map_location=device()))
+
     return history
 
 
-def device(t=None):
-    if t is None:
-        return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    else:
-        return torch.device('cpu')
+def device():
+    return torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 def cross_val(data, model_name, n_splits=10, epochs=20, batch_size=32,  **kwargs):
