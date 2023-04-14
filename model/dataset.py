@@ -80,7 +80,9 @@ class OpenCloseDataset(Dataset):
             edge_index, edge_attr = dense_to_sparse(adj)
             self.edge_attr = edge_attr
         else:
-            edge_index = self._adjacency_threshold(x)
+            adj = self._adjacency_threshold(x)
+            edge_index, edge_attr = dense_to_sparse(adj)
+            self.edge_attr = edge_attr
 
         label = torch.tensor(0 if state == 'close' else 1).long()
         data = Data(x=x, edge_index=edge_index, edge_attr=self.edge_attr, y=label)
@@ -131,15 +133,7 @@ class OpenCloseDataset(Dataset):
         return W.todense()
 
     def _adjacency_threshold(self, matr, threshold=0.5):
-        # todo optimize ???
-        # todo переделать порог
-        idx = []
-        for i in range(len(matr)):
-            for j in range(len(matr)):
-                if abs(matr[i, j]) > threshold:
-                    idx.append((i, j))
-
-        return torch.tensor(idx).long().t().contiguous()
+        return np.abs(matr > threshold) * matr
 
     def get(self, idx):
         """ - Equivalent to __getitem__ in pytorch
