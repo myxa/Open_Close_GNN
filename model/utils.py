@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.metrics import precision_score, recall_score
 from sklearn.model_selection import StratifiedKFold
 from torch_geometric.loader import DataLoader
-from torchmetrics.classification import BinaryRecall, BinaryPrecision, BinaryAccuracy
+from torchmetrics.classification import BinaryRecall, BinaryPrecision, BinaryAccuracy, F1Score
 
 
 def train_epoch(train_loader, model, criterion, optimizer):
@@ -21,10 +21,11 @@ def train_epoch(train_loader, model, criterion, optimizer):
 def eval_epoch(loader, model, criterion):
     model.eval()
     losses = 0
-    acc, pr, rc = [], [], []
+    acc, pr, rc, f = [], [], [], []
     accuracy = BinaryAccuracy()
     precision = BinaryPrecision()
     recall = BinaryRecall()
+    f1 = F1Score(task='binary', average='macro')
 
     with torch.no_grad():
         for data in loader:
@@ -36,8 +37,9 @@ def eval_epoch(loader, model, criterion):
             acc.append(accuracy(pred.cpu(), data.y.cpu()))
             pr.append(precision(pred.cpu(), data.y.cpu()))
             rc.append(recall(pred.cpu(), data.y.cpu()))
+            f.append(f1(pred.cpu(), data.y.cpu()))
 
-    return losses / len(loader.dataset), np.mean(acc), np.mean(pr), np.mean(rc)
+    return losses / len(loader.dataset), np.mean(acc), np.mean(pr), np.mean(rc), np.mean(f)
 
 
 def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None, save_best=False, path_to_save=None):
@@ -46,8 +48,8 @@ def train(model, epochs, train_loader, val_loader, criterion, optimizer, schedul
     best_val_loss = 1000
     for epoch in tqdm(range(1, epochs+1)):
         train_epoch(train_loader, model, criterion, optimizer)
-        train_loss, train_acc, train_prec, train_rec = eval_epoch(train_loader, model, criterion)
-        val_loss, test_acc, test_prec, test_rec = eval_epoch(val_loader, model, criterion)
+        train_loss, train_acc, train_prec, train_rec, _ = eval_epoch(train_loader, model, criterion)
+        val_loss, test_acc, test_prec, test_rec, test_f1 = eval_epoch(val_loader, model, criterion)
         if scheduler is not None:
             scheduler.step()
 
@@ -60,7 +62,7 @@ def train(model, epochs, train_loader, val_loader, criterion, optimizer, schedul
         print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, '
               f'Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
 
-        print(f'Test precision: {test_prec:.4f}, Test recall: {test_rec:.4f}')
+        print(f'Test precision: {test_prec:.4f}, Test recall: {test_rec:.4f}, Test F1: {test_f1}')
         # f'Train precision: {train_prec:.4f}, Train recall: {train_rec:.4f}, '
         history.append((train_loss, val_loss, train_acc, test_acc))
 

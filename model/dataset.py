@@ -11,7 +11,7 @@ from scipy.io import loadmat
 class OpenCloseDataset(Dataset):
     def __init__(self, datafolder, open_file, close_file, 
                  reload=False, test=False, transform=None, 
-                 pre_transform=None, k_degree=10, edge_attr=None,
+                 pre_transform=None, k_degree=10, threshold=0.5, edge_attr=None,
                  noise_close=None, win_close=None, noise_open=None, win_open=None, 
                  noise_n=20, win_n=100):
 
@@ -22,6 +22,7 @@ class OpenCloseDataset(Dataset):
         self.open  = open_file
         self.edge_attr = edge_attr
         self.k_degree = k_degree
+        self.threshold = threshold
         self.outliers = np.array([256, 257, 258, 259]) 
         # [52, 256, 53, 257, 54, 258, 55, 259]
 
@@ -132,8 +133,8 @@ class OpenCloseDataset(Dataset):
 
         return W.todense()
 
-    def _adjacency_threshold(self, matr, threshold=0.5):
-        return np.abs(matr > threshold) * matr
+    def _adjacency_threshold(self, matr):
+        return ((self.threshold[0] > matr) + (matr > self.threshold[1])) * matr
 
     def get(self, idx):
         """ - Equivalent to __getitem__ in pytorch
