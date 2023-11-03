@@ -1,6 +1,7 @@
 import torch
 from tqdm.notebook import tqdm
 import numpy as np
+import pickle
 from sklearn.metrics import precision_score, recall_score
 from sklearn.model_selection import StratifiedKFold
 from torch_geometric.loader import DataLoader
@@ -20,26 +21,27 @@ def train_epoch(train_loader, model, criterion, optimizer):
 
 def eval_epoch(loader, model, criterion):
     model.eval()
-    losses = 0
+    losses = []
     acc, pr, rc, f = [], [], [], []
     accuracy = BinaryAccuracy()
     precision = BinaryPrecision()
     recall = BinaryRecall()
     f1 = F1Score(task='binary', average='macro')
-
+    #k = 0
     with torch.no_grad():
         for data in loader:
             data = data.to(device())
             out = model(data.x, data.edge_index, data.edge_attr, data.batch)
             loss = criterion(out, data.y)
-            losses += loss.item()
+            losses.append(loss.item())
+            #k +=1
             pred = out.argmax(dim=1)
             acc.append(accuracy(pred.cpu(), data.y.cpu()))
             pr.append(precision(pred.cpu(), data.y.cpu()))
             rc.append(recall(pred.cpu(), data.y.cpu()))
             f.append(f1(pred.cpu(), data.y.cpu()))
 
-    return losses / len(loader.dataset), np.mean(acc), np.mean(pr), np.mean(rc), np.mean(f)
+    return np.mean(losses), np.mean(acc), np.mean(pr), np.mean(rc), np.mean(f)
 
 
 def train(model, epochs, train_loader, val_loader, criterion, optimizer, scheduler=None, save_best=False, path_to_save=None):
@@ -62,7 +64,7 @@ def train(model, epochs, train_loader, val_loader, criterion, optimizer, schedul
         print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Test Loss {val_loss:.4f}, '
               f'Train Acc: {train_acc:.4f}, Test Acc: {test_acc:.4f}')
 
-        print(f'Test precision: {test_prec:.4f}, Test recall: {test_rec:.4f}, Test F1: {test_f1}')
+        print(f'Test precision: {test_prec:.4f}, Test recall: {test_rec:.4f}, Test F1: {test_f1:.4f}')
         # f'Train precision: {train_prec:.4f}, Train recall: {train_rec:.4f}, '
         history.append((train_loss, val_loss, train_acc, test_acc))
 
@@ -114,6 +116,32 @@ def cross_val(data, model_name, n_splits=10, epochs=20, batch_size=32,  **kwargs
 
         return eval_metrics
     
+
+def load_data_and_groups(pickle_path, filename, close_ids=None, open_ids=None):
+    
+    with open(pickle_path, 'rb') as handle:
+        data = pickle.load(handle)
+    
+    opened, closed = data[filename]
+
+    if close_ids and open_ids is not None:
+
+        close_ids = np.loadtxt(close_ids, dtype=int)
+        open_ids = np.loadtxt(open_ids, dtype=int)
+
+        groups = np.concatenate([ # сначала открытые потом закрытые, так в датасете 
+            open_ids,
+            close_ids])
+        
+    else:
+        groups = np.concatenate([
+            np.arange(opened.shape[0], dtype=int), 
+            np.arange(closed.shape[0], dtype=int)
+            ])
+
+    labels = [1 for _ in range(len(opened))] + [0 for _ in range(len(closed))]
+
+    return closed, opened, groups, labels
 
 
 

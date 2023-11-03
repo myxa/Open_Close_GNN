@@ -1,19 +1,18 @@
 import torch
 from torch_geometric.data import Dataset, Data
-from torch_geometric.utils import dense_to_sparse
+from torch_geometric.utils import dense_to_sparse, to_dense_adj
 from scipy.sparse import coo_matrix
 import numpy as np
 import os
 import shutil
 from scipy.io import loadmat
 
+from torch_geometric.nn import knn_graph
 
 class OpenCloseDataset(Dataset):
     def __init__(self, datafolder, open_file, close_file, 
                  reload=False, test=False, transform=None, 
-                 pre_transform=None, k_degree=10, threshold=0.5, edge_attr=None,
-                 noise_close=None, win_close=None, noise_open=None, win_open=None, 
-                 noise_n=20, win_n=100):
+                 pre_transform=None, k_degree=10, threshold=0.5, edge_attr=None):
 
         self.reload = reload
         self.test = test
@@ -23,22 +22,8 @@ class OpenCloseDataset(Dataset):
         self.edge_attr = edge_attr
         self.k_degree = k_degree
         self.threshold = threshold
-        self.outliers = np.array([256, 257, 258, 259]) 
-        # [52, 256, 53, 257, 54, 258, 55, 259]
-
-        if noise_close is not None:
-            idx = np.random.choice(np.arange(len(noise_close)), noise_n)
-            self.close = np.concatenate([
-                self.close, noise_close[idx]])
-            self.open = np.concatenate([
-                self.open, noise_open[idx]])
-
-        if win_close is not None:
-            idx = np.random.choice(np.arange(len(win_close)), win_n)
-            self.close = np.concatenate([
-                self.close, win_close[idx]])
-            self.open = np.concatenate([
-                self.open, win_open[idx]])            
+        #self.outliers = np.array([256, 257, 258, 259]) 
+        # [52, 256, 53, 257, 54, 258, 55, 259]           
 
         if self.reload:
             for root, dirs, files in os.walk(f'{self.datafolder}/processed'):
@@ -70,16 +55,18 @@ class OpenCloseDataset(Dataset):
 
     def _load_and_save(self, matr, index, state):
 
-        matr = np.delete(matr, self.outliers, 0)
-        matr = np.delete(matr, self.outliers, 1)
+        #matr = np.delete(matr, self.outliers, 0)
+        #matr = np.delete(matr, self.outliers, 1)
 
         x = torch.from_numpy(matr).float()
 
         if self.k_degree is not None:
-            adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
-            adj = torch.from_numpy(adj).float()
-            edge_index, edge_attr = dense_to_sparse(adj)
-            self.edge_attr = edge_attr
+            #adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
+            #adj = torch.from_numpy(adj).float()
+            #edge_index, edge_attr = dense_to_sparse(adj)
+            #self.edge_attr = edge_attr
+            m = torch.from_numpy(matr).float()
+            edge_index = knn_graph(m, self.k_degree)
         else:
             adj = self._adjacency_threshold(x)
             edge_index, edge_attr = dense_to_sparse(adj)
@@ -134,7 +121,11 @@ class OpenCloseDataset(Dataset):
         return W.todense()
 
     def _adjacency_threshold(self, matr):
-        return ((self.threshold[0] > matr) + (matr > self.threshold[1])) * matr
+        if isinstance(self.threshold, list):
+            return (self.threshold[0] > matr) + (matr > self.threshold[1]) * matr
+        else:
+            return np.abs(matr > self.threshold) * matr #(np.abs(matr) > self.threshold) * matr
+
 
     def get(self, idx):
         """ - Equivalent to __getitem__ in pytorch
@@ -158,7 +149,7 @@ class oldOpenCloseDataset(Dataset):
         self.open  = loadmat(f'{datafolder}/raw/resultsROI_Condition002.mat')['Z']
         self.edge_attr = None
         self.k_degree = k_degree
-        self.dl = np.array([256, 257, 258, 259]) # [52, 256, 53, 257, 54, 258, 55, 259]
+        self.dl = np.array([]) # [52, 256, 53, 257, 54, 258, 55, 259] [256, 257, 258, 259]
 
         super().__init__(root=datafolder, transform=transform, pre_transform=pre_transform)
 
@@ -196,8 +187,8 @@ class oldOpenCloseDataset(Dataset):
 
         # todo fill with 0 or 1
         np.fill_diagonal(matr, 1)
-        matr = np.delete(matr, self.dl, 0)
-        matr = np.delete(matr, self.dl, 1)
+        #matr = np.delete(matr, self.dl, 0)
+        #matr = np.delete(matr, self.dl, 1)
 
         x = torch.from_numpy(matr).float()
 
@@ -280,3 +271,5 @@ class oldOpenCloseDataset(Dataset):
             data = torch.load(os.path.join(self.processed_dir,
                                            f'data_{idx}.pt'))
         return data
+    
+

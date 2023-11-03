@@ -1,5 +1,6 @@
 import torch.nn as nn
-from torch_geometric.nn import global_mean_pool, GCNConv, GATv2Conv, BatchNorm
+import torch
+from torch_geometric.nn import global_mean_pool, GCNConv, GATv2Conv, BatchNorm, GIN
 
 # todo module list
 
@@ -11,15 +12,36 @@ class GCN(nn.Module):
         self.bn1 = BatchNorm(channels[0])
         self.conv2 = GCNConv(channels[0], channels[1])
         self.dropout = nn.Dropout(dropout)
-        self.relu = nn.ReLU()
+        self.relu1 = nn.ReLU()
         self.lin1 = nn.Linear(channels[1], 2)
 
     def forward(self, x, edge_index, edge_attr=None, batch=None):
-        x = self.relu(self.conv1(x, edge_index, edge_attr))
+        x = self.relu1(self.conv1(x, edge_index, edge_attr))
         x = self.bn1(x)
-        x = self.relu(self.conv2(x, edge_index, edge_attr))
+        x = self.conv2(x, edge_index, edge_attr)
         x = self.dropout(x)
         x = global_mean_pool(x, batch)
+        x = self.lin1(x)
+        return x
+    
+
+class GINModel(nn.Module):
+    def __init__(self, num_features, channels, layers=1, dropout=.3):
+        super().__init__()
+        self.conv1 = GIN(int(num_features), channels[0], 
+                         num_layers=layers, out_channels=channels[1], dropout=dropout)
+        self.relu1 = nn.ReLU()
+        self.conv2 = GIN(int(num_features), channels[0], 
+                         num_layers=layers, out_channels=channels[1], dropout=dropout)
+        self.relu2 = nn.ReLU()
+        self.lin1 = nn.Linear(channels[1] * 2, 2)
+
+    def forward(self, x, edge_index, edge_attr=None, batch=None):
+        x1 = self.relu1(self.conv2(x=x, edge_index=edge_index, edge_attr=edge_attr))
+        x1 = global_mean_pool(x1, batch)
+        x2 = self.conv2(x=x, edge_index=edge_index, edge_attr=edge_attr)
+        x2 = global_mean_pool(x2, batch)
+        x = torch.cat((x1, x2), dim=1)
         x = self.lin1(x)
         return x
 
@@ -38,7 +60,7 @@ class GATv2(nn.Module):
         x = self.gat1(x, edge_index)
         x = self.bn(self.elu(x))
         x = self.dropout(x)
-        x = self.elu(self.gat2(x, edge_index))
+        x = self.gat2(x, edge_index)
         x = global_mean_pool(x, batch)
         x = self.lin(x)
         return x

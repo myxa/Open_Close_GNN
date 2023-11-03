@@ -6,3 +6,5 @@ requirements
 .idea
 .vscode
 notebooks/nani_o_shimaska.ipynb
+new_data
+.conda
