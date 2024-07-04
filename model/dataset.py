@@ -58,10 +58,12 @@ class OpenCloseDataset(Dataset):
 
         x = torch.from_numpy(matr).float()
 
-        adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
-        adj = torch.from_numpy(adj).float()
-        edge_index, edge_attr = dense_to_sparse(adj)
-        self.edge_attr = edge_attr
+        #adj = self.compute_KNN_graph(matr, k_degree=self.k_degree)
+        
+        #adj = torch.from_numpy(adj).float()
+        #edge_index, edge_attr = dense_to_sparse(adj)
+        #self.edge_attr = edge_attr
+        edge_index = knn_graph(x, self.k_degree)
 
 
         label = torch.tensor(0 if state == 'close' else 1).long()

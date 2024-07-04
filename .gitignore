@@ -8,3 +8,8 @@ requirements
 notebooks/nani_o_shimaska.ipynb
 new_data
 .conda
+.venv
+data_test
+data_eeg
+augmentations
+*.npy
