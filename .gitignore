@@ -13,3 +13,7 @@ data_test
 data_eeg
 augmentations
 *.npy
+aug/test_data
+aug/gen_data
+aug
+plots
